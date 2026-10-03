@@ -83,8 +83,8 @@ def base(msp, dx=0, dy=0, cotas=True):
 def option(msp, o):
     base(msp)
     L = o['L']
-    rect(msp, 4.0, M.Y_T0, 19.0, M.Y_T0 + L, 'TORRE-PROJECAO')
-    T(msp, 11.5, M.Y_T0 + L - 1.2, f"projeção da torre {br(M.W_T)} x {br(L)} m", 0.5, 'TORRE-PROJECAO')
+    rect(msp, o['x_t0'], M.Y_T0, 19.0, M.Y_T0 + L, 'TORRE-PROJECAO')
+    T(msp, 11.5, M.Y_T0 + L - 1.2, f"projeção da torre {br(o['wt'])} x {br(L)} m", 0.5, 'TORRE-PROJECAO')
     for x in (o['afast'], 24 - o['afast']):
         msp.add_line((x, 5), (x, M.y_back(x) - 1), dxfattribs={'layer': 'AFASTAMENTOS'})
     T(msp, o['afast'] + 0.3, 40, f"H/8 = {br(o['afast'])}", 0.45, 'AFASTAMENTOS', rot=90)
@@ -112,24 +112,24 @@ def option(msp, o):
     for j, k in enumerate(sorted(set(o['seq']))):
         dx = 40 * (len(o['sub']) + 1 + j)
         base(msp, dx=dx, cotas=False)
-        S, du, c = o['S'], o['du'], M.CORR
+        du, c, xt = o['du'], M.CORR, o['x_t0']
         y0 = M.Y_T0
-        wings = [(0.0, S, 0), (0.0, S, 1), (S + M.CORE, L, 0), (S + M.CORE, L, 1)]
-        for (u0, u1, row), al in zip(wings, o['FLOORS'][k]):
-            x0, x1 = (4.0, 4.0 + du) if row == 0 else (4.0 + du + c, 19.0)
-            items = o['AL'][al]
-            tot = sum(a for _, a in items)
-            seq = items if u0 > 0 else list(reversed(items))
-            u = u0
-            for t, a in seq:
-                w = (u1 - u0) * a / tot
-                rect(msp, x0, y0 + u, x1, y0 + u + w, 'UNIDADES', dx=dx)
-                T(msp, (x0 + x1) / 2 + dx, y0 + u + w / 2, f"{t} {br(a)}", 0.45, 'UNIDADES', rot=90)
-                u += w
-        rect(msp, 4.0 + du, y0, 4.0 + du + c, y0 + L, 'TORRE-TIPO', dx=dx)
-        rect(msp, 4.0, y0 + S, 19.0, y0 + S + M.CORE, 'NUCLEO', dx=dx)
-        rect(msp, 4.0, y0, 19.0, y0 + L, 'TORRE-TIPO', dx=dx)
-        T(msp, 12 + dx, -21, f"PAV. TIPO {k} ({o['seq'].count(k)}x)", 0.9)
+        pl_ = o['plans'][k]
+        split = pl_['split']
+        for ri, row in enumerate(pl_['rows']):
+            x0, x1 = (xt, xt + du) if ri == 0 else (xt + du + c, 19.0)
+            u = 0.0
+            for j, (t, a, fr) in enumerate(row):
+                if j == split:
+                    u += M.CORE
+                rect(msp, x0, y0 + u, x1, y0 + u + fr, 'UNIDADES', dx=dx)
+                T(msp, (x0 + x1) / 2 + dx, y0 + u + fr / 2, f"{t} {br(a)}", 0.4, 'UNIDADES', rot=90)
+                u += fr
+        us = sum(fr for _, _, fr in pl_['rows'][0][:split])
+        rect(msp, xt + du, y0, xt + du + c, y0 + L, 'TORRE-TIPO', dx=dx)
+        rect(msp, xt, y0 + us, 19.0, y0 + us + M.CORE, 'NUCLEO', dx=dx)
+        rect(msp, xt, y0, 19.0, y0 + L, 'TORRE-TIPO', dx=dx)
+        T(msp, 12 + dx, -21, M.kind_name(o["plans"][k]["comp"]).upper() + f" ({o['seq'].count(k)}x)", 0.9)
 
 
 def br(x, d=2):

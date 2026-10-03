@@ -111,8 +111,7 @@ def scen(**kw):
     keep = dict(M.P); M.P.update(kw)
     out = {}
     for o in M.OPTS:
-        n = M.option(o['key'], o['tipo'], o['ca_mode'], o['n'], o['fk'],
-                     o['nsub'], o['label'])
+        n = M.option(o['key'], o['tipo'], o['ca_mode'], o['n'], o['c1'], o['nsub'], o['label'], comp_row2=o['c2'])
         out[o['key']] = n
     M.P.clear(); M.P.update(keep)
     return out
@@ -172,7 +171,8 @@ def p3(pdf):
         ('1. O que limita este lote', [
             'Frente de 24 m: cabe uma torre de 15 m de largura com afastamentos ≥ H/8, e o estacionamento só se organiza em faixa (corredor central + 2 fileiras).',
             'Um subsolo comporta 36 vagas; o térreo, sob pilotis, até 36 — mas cada vaga no térreo é lazer a menos. O 2º subsolo (E3) custa mais do que rende.',
-            'O teto de VGV é o CA: 3.810 m² (básico) ou 4.572 m² (máximo, condicionado à Compensação Paisagística).']),
+            'Com unidades compactas (2Q 40–45 m², 3Q 50–60 m²) o limite passa a ser a vaga: 1 subsolo + térreo = 72 vagas → no máximo ~68 aptos 2Q/3Q;'
+            ' acima disso só com 2º subsolo (E3, 80 un.), que não se paga. Com studios (1 vaga a cada 3) o limite volta a ser o CA (até 120 un.).']),
         ('2. Família 2Q + 3Q', [
             f"Melhor: {o['E2']['label']} — {o['E2']['nun']} unidades, VGV {mi(o['E2']['vgv'])}, resultado {mi(o['E2']['resultado'])} "
             f"(margem {o['E2']['margem'] * 100:.0f}%). No CA básico (E1) a margem cai a {o['E1']['margem'] * 100:.0f}%.",
@@ -184,7 +184,7 @@ def p3(pdf):
             'O studio rende mais aqui pelos mesmos motivos do 151: m² mais caro e 1 vaga a cada 3 unidades (o subsolo único basta).']),
         ('4. Recomendação', [
             'Se o CA máximo for confirmado: E6 (máximo resultado) ou E5 (mix mais vendável). Sem CA máximo: E4 (2Q + studios, CA básico).',
-            'Família 2Q + 3Q só faz sentido com preço de venda acima de ~R$ 8 mil/m² — validar com corretor antes de seguir.',
+            'Família 2Q + 3Q só faz sentido com preço de venda acima de ~R$ 8,5 mil/m² — validar com corretor antes de seguir.',
             'Antes do anteprojeto: levantamento planialtimétrico, sondagem, consulta à SMUR sobre Compensação Paisagística e recuo na R. Zdenko Gayer.']),
         ('Ressalvas', [f'{i + 1}. {t}' for i, t in enumerate(RR.RESSALVAS)]),
     ]

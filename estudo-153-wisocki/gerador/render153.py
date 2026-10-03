@@ -153,7 +153,7 @@ def terreo(pl, o):
     yc = o['y_core']
     pl.rect(4.0, yc - 3.0, 9.0, yc + M.CORE + 3.0, fc=C_CORE, ec=EDGE, z=4)
     pl.text(6.5, yc + 1.9, 'hall', size=4.4)
-    pl.rect(4.0, M.Y_T0, 19.0, M.Y_T0 + Lt, fc='none', ec='#333333', lw=0.5, ls=(0, (2, 1)), z=5)
+    pl.rect(o['x_t0'], M.Y_T0, 19.0, M.Y_T0 + Lt, fc='none', ec='#333333', lw=0.5, ls=(0, (2, 1)), z=5)
     pl.text(11.5, M.Y_T0 + Lt - 2.0, 'projeção da torre', size=4.4, color='#333333')
     # guarita / lixo / gás no recuo
     pl.rect(9.5, 0.6, 17.5, 3.6, fc=(0.81, 0.81, 0.81), ec=(0.47, 0.47, 0.47), z=4)
@@ -209,7 +209,7 @@ def subsolo(pl, o, lvl):
 
 # ------------------------------------------------------------------ pavimento tipo (1:250, horizontal)
 def tipo(ov, o, kind, x0, y0, s):
-    L, Wt, S, du, c = o['L'], M.W_T, o['S'], o['du'], M.CORR
+    L, Wt, du, c = o['L'], o['wt'], o['du'], M.CORR
     X = lambda u: x0 + u * s
     Y = lambda v: y0 + v * s
 
@@ -218,28 +218,26 @@ def tipo(ov, o, kind, x0, y0, s):
         if lab:
             ov.text((X(u0) + X(u1)) / 2, (Y(v0) + Y(v1)) / 2, lab, size=fs, ha='center', va='center', linespacing=1.2)
 
-    alas = o['FLOORS'][kind]
-    wings = [(0.0, S, 0), (0.0, S, 1), (S + M.CORE, L, 0), (S + M.CORE, L, 1)]   # (u0,u1,row)
-    for (u0, u1, row), al in zip(wings, alas):
-        v0, v1 = (0.0, du) if row == 0 else (du + c, Wt)
-        items = o['AL'][al]
-        tot = sum(a for _, a in items)
-        left = u0 < S
-        seq = items if not left else list(reversed(items))     # 2Q junto ao núcleo, 3Q na ponta
-        u = u0
-        for t, a in seq:
-            w = (u1 - u0) * a / tot
+    pl_ = o['plans'][kind]
+    split = pl_['split']
+    for ri, row in enumerate(pl_['rows']):
+        v0, v1 = (0.0, du) if ri == 0 else (du + c, Wt)
+        u = 0.0
+        for j, (t, a, fr) in enumerate(row):
+            if j == split:
+                u += M.CORE
             fc = {'2Q': C_2Q, '3Q': C_3Q, 'ST': C_ST}[t]
             lab = {'2Q': 'Ap. 2Q', '3Q': 'Ap. 3Q', 'ST': 'Studio'}[t] + f"\n{br(a)}m²"
-            box(u, u + w, v0, v1, fc, lab, 4.3 if t == 'ST' else 4.6)
-            u += w
-    box(0, S, du, du + c, C_PAVE, 'Circulação', 4.0)
-    box(S + M.CORE, L, du, du + c, C_PAVE, 'Circulação', 4.0)
-    box(S, S + M.CORE, 0, Wt, C_CORE, 'Hall\nescada\nelev.', 4.2)
+            box(u, u + fr, v0, v1, fc, lab, 4.0 if t == 'ST' else 4.4)
+            u += fr
+    us = sum(fr for _, _, fr in pl_['rows'][0][:split])
+    box(0, us, du, du + c, C_PAVE, 'Circulação', 4.0)
+    box(us + M.CORE, L, du, du + c, C_PAVE, 'Circulação', 4.0)
+    box(us, us + M.CORE, 0, Wt, C_CORE, 'Hall\nescada\nelev.', 4.2)
 
 
 def rooftop(ov, o, x0, y0, s):
-    L, Wt = o['L'], M.W_T
+    L, Wt = o['L'], o['wt']
     at = o['atico']
     ul = at / Wt
     u0 = (L - ul) / 2
@@ -269,9 +267,8 @@ def occupation(page, o, sub):
     scalebar(ov, 34, 700, s5)
     # coluna direita: tipos + rooftop
     kinds = sorted(set(o['seq']))
-    names = {'A': 'Pavimento Tipo 2Q + 3Q', 'B': 'Pavimento Tipo 2Q c/ suíte', 'M': 'Pavimento Tipo misto 2Q + studios',
-             'S': 'Pavimento Tipo studios + 2Q'}
-    panels = [(k, names[k] + f"  ({o['seq'].count(k)}x)") for k in kinds] + [('R', 'Rooftop – ático')]
+    panels = [(k, M.kind_name(o['plans'][k]['comp']).replace('Pav. tipo', 'Pavimento Tipo') + f"  ({o['seq'].count(k)}x)")
+              for k in kinds] + [('R', 'Rooftop – ático')]
     x0 = 1160 - o['L'] * s25
     y = 70
     gap = (650 - 70) / len(panels)
@@ -280,7 +277,7 @@ def occupation(page, o, sub):
             rooftop(ov, o, x0, y, s25)
         else:
             tipo(ov, o, k, x0, y, s25)
-        ov.text(x0 + o['L'] * s25 / 2, y + M.W_T * s25 + 18, t, size=10, color='black', ha='center')
+        ov.text(x0 + o['L'] * s25 / 2, y + o['wt'] * s25 + 18, t, size=10, color='black', ha='center')
         y += gap
     # legenda
     ly = 668
@@ -350,13 +347,13 @@ def diagram(page, o, sub):
 
     L = o['L']
     zt = M.TERREO + o['n'] * M.TIPO_H
-    box(5.0, M.Y_T0 + 1.0, 18.0, M.Y_T0 + L - 1.0, 0, M.TERREO, (0.81, 0.81, 0.85), (0.73, 0.73, 0.78),
+    box(o['x_t0'] + 1.0, M.Y_T0 + 1.0, 18.0, M.Y_T0 + L - 1.0, 0, M.TERREO, (0.81, 0.81, 0.85), (0.73, 0.73, 0.78),
         (0.73, 0.73, 0.78), zo=5)
-    box(4.0, M.Y_T0, 19.0, M.Y_T0 + L, M.TERREO, zt, (1.0, 1.0, 1.0), (0.97, 0.97, 0.97), (0.97, 0.97, 0.97),
+    box(o['x_t0'], M.Y_T0, 19.0, M.Y_T0 + L, M.TERREO, zt, (1.0, 1.0, 1.0), (0.97, 0.97, 0.97), (0.97, 0.97, 0.97),
         lines=o['n'], step=M.TIPO_H, zo=6)
-    ul = o['atico'] / M.W_T
+    ul = o['atico'] / o['wt']
     u0 = M.Y_T0 + (L - ul) / 2
-    box(4.0, u0, 19.0, u0 + ul, zt, zt + M.ATICO, (0.91, 0.94, 0.69), (0.89, 0.92, 0.65), (0.89, 0.92, 0.65), zo=7)
+    box(o['x_t0'], u0, 19.0, u0 + ul, zt, zt + M.ATICO, (0.91, 0.94, 0.69), (0.89, 0.92, 0.65), (0.89, 0.92, 0.65), zo=7)
 
     # rótulos com linhas de chamada
     def lab(z, t):
@@ -364,7 +361,7 @@ def diagram(page, o, sub):
         py = py if z else py
         ov.ax.plot([34, 400], [py + 4, py + 4], lw=0.4, color=(0.6, 0.6, 0.6), ls=(0, (1, 1)))
         ov.text(34, py, t, size=8.5, color=GREY)
-    tipos = ', '.join(f"{o['seq'].count(k)}x {dict(A='2Q+3Q', B='2Q c/ suíte', M='misto 2Q+studios', S='studios+2Q')[k]}"
+    tipos = ', '.join(f"{o['seq'].count(k)}x " + M.kind_name(o['plans'][k]['comp']).replace('Pav. tipo ', '') + ' por pav.'
                       for k in sorted(set(o['seq'])))
     lab(zt + M.ATICO * 0.5, 'Rooftop – salão de festas/gourmet + terraço')
     lab(M.TERREO + o['n'] * M.TIPO_H / 2, f"Pav. tipo {o['n']}x – {tipos}")
@@ -389,6 +386,8 @@ RESSALVAS = [
     'CA máximo (3,0) depende da Compensação Paisagística, “a ser regulamentada por lei específica” (LC 25/2020) — confirmar na SMUR.',
     'Altura máxima subordinada à infraestrutura existente (nota D da ZR3); subsolo a 0 m da divisa com o lote 07 exige contenção — sondagem SPT.',
     'Preços de venda e custos são premissas do estudo 151 (3Q a R$ 6.800/m²), não validados em pesquisa de mercado local.',
+    'Unidades compactas (2Q 40–45 m², 3Q 50–60 m², studio com conjugado ~21 m² úteis): conferir áreas mínimas por compartimento '
+    '(Anexo IV da LC 26/2020) e adaptabilidade (Dec. 9.451/2018) no anteprojeto.',
 ]
 
 
@@ -419,7 +418,7 @@ def quadro(page, o, sub, all_opts):
         ('Tx. de Permeabilidade', 'mín.', '25%' if mx else '20%', 'utilizada', br(o['perm'] * 100, 1) + '%')]:
         kv(y, a, b1, v1); kv(y + 15.5, '', b2, v2); ov.line(34, y + 21, 515.9, y + 21); y += 31
     kv(y, 'Altura Padrão / Utilizada (pavimentos)', '', f"14 / {o['n'] + 1}")
-    kv(y + 15.5, 'Afastamento torre (H/8, mín. 2,00) – adotado', '', f"{br(o['afast'])} / 4,00 m")
+    kv(y + 15.5, 'Afastamento torre lado lote 10 (H/8, mín. 2,00) – adotado', '', f"{br(o['afast'])} / {br(o['x_t0'])} m")
 
     y = 290
     T(36.9, y, 'Torre única', size=7.5, weight='bold', color='black'); ov.line(34, y + 5, 515.9, y + 5)

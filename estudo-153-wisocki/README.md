@@ -6,14 +6,17 @@ Este estudo usa as mesmas premissas de preço, custo e legislação do estudo 15
 
 ## Opções (`entregaveis/`)
 
-| Opção | Família | CA | Subsolos | Unidades |
-|---|---|---|---|---|
-| Estudo 1 | 2Q + 3Q | 2,5 | 1 | 48 |
-| Estudo 2 | 2Q + 3Q | 3,0 | 1 | 56 |
-| Estudo 3 | 2Q + 3Q | 3,0 | 2 | 56 (mostra que o 2º subsolo não compensa) |
-| Estudo 4 | 2Q + studios | 2,5 | 1 | 70 |
-| Estudo 5 | 2Q + studios | 3,0 | 1 | 96 |
-| Estudo 6 | studios + 2Q | 3,0 | 1 | 112 |
+Faixas de área adotadas: 2Q de 40 a 45 m², 3Q de 50 a 60 m² e studio com 26 a 28 m² privativos (conjugado de cerca de 21 m² úteis).
+Cada pavimento foi organizado para caber o máximo de unidades dentro da lei.
+
+| Opção | Família | CA | Pav. | Subsolos | Unidades |
+|---|---|---|---|---|---|
+| Estudo 1 | 2Q + 3Q | 2,5 | 9 | 1 | 64 (48 2Q + 16 3Q) |
+| Estudo 2 | 2Q + 3Q | 3,0 | 12 | 1 | 66 (22 2Q + 44 3Q) |
+| Estudo 3 | 2Q + 3Q | 3,0 | 11 | 2 | 80 (60 2Q + 20 3Q): máximo absoluto; o 2º subsolo não se paga |
+| Estudo 4 | 2Q + studios | 2,5 | 8 | 1 | 98 (14 2Q + 84 studios) |
+| Estudo 5 | 2Q + studios | 3,0 | 9 | 1 | 112 (32 2Q + 80 studios), versão equilibrada |
+| Estudo 6 | studios + 2Q | 3,0 | 11 | 1 | 120 (20 2Q + 100 studios), máximo sem EIV |
 
 Também estão em `entregaveis/`:
 

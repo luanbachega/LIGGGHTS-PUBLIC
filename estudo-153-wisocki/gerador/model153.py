@@ -53,42 +53,86 @@ def rows_rects(x0, x1, y0, y1, excl=()):
     return out
 
 
-def option(key, tipo, ca, n, floor_kind, nsub, label, notes=()):
+TGT = {'2Q': 42.5, '3Q': 55.0, 'ST': 27.0}
+RANGE = {'2Q': (40.0, 45.0), '3Q': (50.0, 60.0)}
+KNAME = {}
+
+
+def st_conj(area, du):
+    fr = area / du
+    return (fr - 0.15) * (du - 0.15) - 3.5
+
+
+def pack_row(R, du, n2, n3, ns):
+    """distribui a fileira (comprimento R, profundidade du) entre as unidades; None se fora das faixas."""
+    n = n2 + n3 + ns
+    if n == 0:
+        return None
+    tot = n2 * TGT['2Q'] + n3 * TGT['3Q'] + ns * TGT['ST']
+    k = R * du / tot
+    a2, a3, as_ = TGT['2Q'] * k, TGT['3Q'] * k, TGT['ST'] * k
+    if n2 and not (RANGE['2Q'][0] <= a2 <= RANGE['2Q'][1]):
+        return None
+    if n3 and not (RANGE['3Q'][0] <= a3 <= RANGE['3Q'][1]):
+        return None
+    if ns and not (21.0 <= st_conj(as_, du) <= 30.0):
+        return None
+    # 3Q nas pontas, studios e 2Q intercalados no meio
+    ends = [('3Q', a3)] * n3
+    mid = [('2Q', a2)] * n2 + [('ST', as_)] * ns
+    left = ends[: (n3 + 1) // 2]
+    right = ends[(n3 + 1) // 2:]
+    seq = left + mid + right
+    return [(t, round(a, 2), a / du) for t, a in seq]
+
+
+def kind_name(c):
+    n2, n3, ns = c
+    parts = []
+    if n2: parts.append(f"{2 * n2} 2Q")
+    if n3: parts.append(f"{2 * n3} 3Q")
+    if ns: parts.append(f"{2 * ns} studios")
+    return 'Pav. tipo ' + ' + '.join(parts)
+
+
+def option(key, tipo, ca, n, comp_row, nsub, label, notes=(), comp_row2=None):
+    """comp_row = (n2, n3, ns) por fileira (2 fileiras por pavimento). comp_row2: pavimento alternativo."""
     ca_lim = CA_MAX if ca == 'max' else CA_BAS
-    af = ca_lim * LOT_AREA / (n + 1) + NC_CORE       # térreo pilotis + n tipos, mesmo pavimento
-    L = round(af / W_T - 0.005, 2)
-    af = L * W_T
-    S = (L - CORE) / 2                                  # comprimento de cada ala
-    du = (W_T - CORR) / 2                               # profundidade das unidades
-    wing = S * du
-    nst_w = 4 if wing >= 106 else 3
-    # catálogo de alas: (tipologia, área)
-    AL = {
-        '2q3q': [('2Q', wing * 0.43), ('3Q', wing * 0.57)],
-        '2q2q': [('2Q', wing / 2), ('2Q', wing / 2)],
-        'st': [('ST', wing / nst_w)] * nst_w,
-    }
-    FLOORS = {   # 4 alas por pavimento
-        'A': ['2q3q'] * 4,                       # 4×2Q + 4×3Q
-        'B': ['2q2q'] * 4,                       # 8×2Q (c/ suíte)
-        'M': ['2q2q', '2q2q', 'st', 'st'],       # 4×2Q + studios
-        'S': ['2q2q', 'st', 'st', 'st'],         # 2×2Q + studios
-    }
-    seq = [floor_kind[i % len(floor_kind)] for i in range(n)]
+    H = TERREO + n * TIPO_H + ATICO
+    afast = max(2.0, H / 8)
+    x_t0 = max(X_T0, afast)
+    wt = 19.0 - x_t0
+    af = ca_lim * LOT_AREA / (n + 1) + NC_CORE
+    L = round(af / wt - 0.005, 2)
+    af = L * wt
+    du = (wt - CORR) / 2
+    R = L - CORE
+    plans, seq = {}, []
+    kinds = [comp_row] + ([comp_row2] if comp_row2 else [])
+    for i, c in enumerate(kinds):
+        row = pack_row(R, du, *c)
+        if row is None:
+            return None
+        cum, best, split = 0.0, 1e9, 0
+        for j, (_, _, fr) in enumerate(row):
+            cum += fr
+            if abs(cum - R / 2) < best and 0 < j + 1 < len(row):
+                best, split = abs(cum - R / 2), j + 1
+        plans['K%d' % i] = dict(rows=[row, row], split=split, comp=c)
+    for i in range(n):
+        seq.append('K%d' % (i % len(kinds)))
     units = {}
     for f in seq:
-        for w in FLOORS[f]:
-            for t, a in AL[w]:
-                k = (t, round(a, 2))
-                units[k] = units.get(k, 0) + 1
+        for row in plans[f]['rows']:
+            for t, a, fr in row:
+                units[(t, a)] = units.get((t, a), 0) + 1
     n2 = sum(q for (t, a), q in units.items() if t == '2Q')
     n3 = sum(q for (t, a), q in units.items() if t == '3Q')
     nst = sum(q for (t, a), q in units.items() if t == 'ST')
     nun = n2 + n3 + nst
     priv = sum(a * q for (t, a), q in units.items())
     vx = vagas_exigidas(n2 + n3, nst)
-    H = TERREO + n * TIPO_H + ATICO
-    afast = max(2.0, H / 8)
+    S = sum(fr for _, _, fr in plans['K0']['rows'][0][:plans['K0']['split']])
 
     # ---------------- estacionamento (geometria) ----------------
     y_core = Y_T0 + S
@@ -128,12 +172,10 @@ def option(key, tipo, ca, n, floor_kind, nsub, label, notes=()):
     for f in sorted(set(seq)):
         c = seq.count(f)
         u = {}
-        for w in FLOORS[f]:
-            for t, a in AL[w]:
-                u[(t, round(a, 2))] = u.get((t, round(a, 2)), 0) + 1
-        nm = {'A': 'Pav. tipo 2Q + 3Q', 'B': 'Pav. tipo 2Q (c/ suíte)', 'M': 'Pav. tipo misto 2Q + studios',
-              'S': 'Pav. tipo studios + 2Q'}[f]
-        rows.append((nm, c, comp_tipo, NC_CORE, af, u))
+        for row in plans[f]['rows']:
+            for t, a, fr in row:
+                u[(t, a)] = u.get((t, a), 0) + 1
+        rows.append((kind_name(plans[f]['comp']), c, comp_tipo, NC_CORE, af, u))
     rows.append(('Ático – salão de festas/gourmet (≤ 1/3)', 1, 0.0, atico, atico, None))
     rows.append(('Guarita, lixo e gás (recuo frontal)', 1, 0.0, gua, gua, None))
     comp = sum(r[1] * r[2] for r in rows)
@@ -165,36 +207,39 @@ def option(key, tipo, ca, n, floor_kind, nsub, label, notes=()):
     res = vgv - custo - eiv_vc
 
     # studio: área útil do conjugado (paredes 0,15 m; banho 3,5 m²)
-    st_conj = None
+    stc = None
     if nst:
-        fr = S / nst_w
-        st_conj = (fr - 0.15) * (du - 0.15) - 3.5
+        a_st = next(a for (t, a) in units if t == 'ST')
+        stc = st_conj(a_st, du)
 
-    return dict(fk=list(floor_kind), key=key, tipo=tipo, label=label, ca_mode=ca, ca_lim=ca_lim, n=n, seq=seq, nsub=nsub,
-                L=L, af=af, S=S, du=du, wing=wing, nst_w=nst_w, AL=AL, FLOORS=FLOORS, units=units,
+    y_end = Y_T0 + L
+    d_back = min((y_back(x) - y_end) * COS_B for x in (x_t0, 19.0))
+    return dict(c1=comp_row, c2=comp_row2, notes0=list(notes), d_back=d_back, comp_rows=kinds, key=key, plans=plans, x_t0=x_t0, wt=wt, R=R, tipo=tipo, label=label, ca_mode=ca, ca_lim=ca_lim, n=n, seq=seq, nsub=nsub,
+                L=L, af=af, S=S, du=du, units=units,
                 n2=n2, n3=n3, nst=nst, nun=nun, priv=priv, vx=vx, H=H, afast=afast, y_core=y_core,
                 sub=sub, ground=ground, g_all=g_all, vagas=vagas, nsub_v=nsub_v, sub_area=sub_area,
                 rows=rows, comp=comp, constr=constr, ncomp=ncomp, ca=comp / LOT_AREA, atico=atico,
                 lazer=lazer, lazer_req=6.0 * nun, roof=roof, lazer_terreo=lazer_terreo,
                 perm=perm, perm_req=0.25 if ca == 'max' else 0.20,
                 to_torre=af / LOT_AREA, custo=custo, vgv=vgv, vgv_un=vgv_un, exced=exced,
-                eiv=eiv, eiv_vc=eiv_vc, resultado=res, margem=res / vgv, st_conj=st_conj,
+                eiv=eiv, eiv_vc=eiv_vc, resultado=res, margem=res / vgv, st_conj=stc,
                 aisle_end=aisle_end, back_off=back_off, notes=list(notes))
 
 
-OPTS = [
-    option('E1', '2Q + 3Q', 'bas', 6, ['A', 'B'], 1, 'Estudo 1 – 2Q e 3Q, CA básico (2,5)',
-           ['tipos alternados: 2Q + 3Q / 2Q c/ suíte', '1 subsolo + vagas sob pilotis']),
-    option('E2', '2Q + 3Q', 'max', 7, ['A', 'A', 'B'], 1, 'Estudo 2 – 2Q e 3Q, CA máximo (3,0)',
-           ['CA máximo depende da Compensação Paisagística (perm. 25%, TO base 60% / torre 50%)']),
-    option('E3', '2Q + 3Q', 'max', 7, ['A', 'A', 'B'], 2, 'Estudo 3 – 2Q e 3Q, CA máx., 2 subsolos',
-           ['2 subsolos liberam o térreo inteiro para lazer']),
-    option('E4', '2Q + studios', 'bas', 7, ['M'], 1, 'Estudo 4 – 2Q e studios, CA básico (2,5)'),
-    option('E5', '2Q + studios', 'max', 8, ['M'], 1, 'Estudo 5 – 2Q e studios, CA máximo (3,0)',
-           ['CA máximo depende da Compensação Paisagística']),
-    option('E6', '2Q + studios', 'max', 8, ['S'], 1, 'Estudo 6 – studios + 2Q, CA máximo (3,0)',
-           ['predominância de studios; abaixo de 130 unidades (sem EIV)']),
-]
+OPTS = [o for o in [
+    option('E1', '2Q + 3Q', 'bas', 8, (3, 1, 0), 1, 'Estudo 1 – 2Q e 3Q, CA básico (2,5)',
+           ['máximo de unidades no CA básico com 1 subsolo']),
+    option('E2', '2Q + 3Q', 'max', 11, (1, 2, 0), 1, 'Estudo 2 – 2Q e 3Q, CA máximo (3,0)',
+           ['máximo de unidades com 1 subsolo (vagas limitam: 72)', 'CA máximo depende da Compensação Paisagística']),
+    option('E3', '2Q + 3Q', 'max', 10, (3, 1, 0), 2, 'Estudo 3 – 2Q e 3Q, CA máx., 2 subsolos',
+           ['máximo absoluto de unidades: exige 2º subsolo']),
+    option('E4', '2Q + studios', 'bas', 7, (1, 0, 6), 1, 'Estudo 4 – 2Q e studios, CA básico (2,5)',
+           ['máximo de unidades no CA básico']),
+    option('E5', '2Q + studios', 'max', 8, (2, 0, 5), 1, 'Estudo 5 – 2Q e studios, CA máximo (3,0)',
+           ['versão equilibrada: 32 aptos 2Q', 'CA máximo depende da Compensação Paisagística']),
+    option('E6', '2Q + studios', 'max', 10, (1, 0, 5), 1, 'Estudo 6 – studios + 2Q, CA máximo (3,0)',
+           ['máximo de unidades (120), abaixo de 130: sem EIV']),
+] if o]
 
 
 def checks(o):
@@ -202,9 +247,12 @@ def checks(o):
     return [
         ('CA (LC 25/2020)', f"{o['ca']:.2f} ≤ {o['ca_lim']:.2f}".replace('.', ','), o['ca'] <= o['ca_lim'] + 1e-6),
         ('Pavimentos', f"{o['n'] + 1} ≤ 14", o['n'] + 1 <= 14),
-        ('Afast. torre H/8', f"{X_T0:.2f} ≥ {o['afast']:.2f} m".replace('.', ','), X_T0 >= o['afast'] - 1e-6),
+        ('Tipologias 2Q 40–45 / 3Q 50–60 m²', 'ok', all((RANGE[t][0] - 0.01 <= a <= RANGE[t][1] + 0.01) for (t, a) in o['units'] if t in RANGE)),
+        ('Afast. torre H/8', f"{o['x_t0']:.2f} ≥ {o['afast']:.2f} m".replace('.', ','), o['x_t0'] >= o['afast'] - 1e-6),
         ('TO torre', f"{o['to_torre'] * 100:.1f}% ≤ {50 if o['ca_mode'] == 'max' else 65}%".replace('.', ','),
          o['to_torre'] <= (0.50 if o['ca_mode'] == 'max' else 0.65)),
+        ('Torre × fundos (≥ 5,00 / H/8)', f"{o['d_back']:.2f} ≥ {max(5.0, o['afast']):.2f} m".replace('.', ','),
+         o['d_back'] >= max(5.0, o['afast']) - 1e-6),
         ('Vagas (Anexo VII)', f"{o['vagas']} ≥ {o['vx']['total']}", o['vagas'] >= o['vx']['total']),
         ('Recreação 6 m²/un', f"{o['lazer']:.0f} ≥ {o['lazer_req']:.0f} m²", o['lazer'] >= o['lazer_req']),
         ('Permeabilidade', f"{o['perm'] * 100:.1f}% ≥ {o['perm_req'] * 100:.0f}%".replace('.', ','), o['perm'] >= o['perm_req']),
@@ -216,7 +264,7 @@ def checks(o):
 if __name__ == '__main__':
     for o in OPTS:
         bad = [c[0] for c in checks(o) if not c[2]]
-        print(f"{o['key']} n={o['n']} L={o['L']:.2f} af={o['af']:.1f} wing={o['wing']:.1f} un={o['nun']:3d} "
+        print(f"{o['key']} n={o['n']} L={o['L']:.2f} af={o['af']:.1f} du={o['du']:.2f} wt={o['wt']:.2f} dback={o['d_back']:.1f} un={o['nun']:3d} "
               f"(2Q {o['n2']} 3Q {o['n3']} st {o['nst']}) priv={o['priv']:.0f} CA={o['ca']:.2f} constr={o['constr']:.0f} "
               f"vag={o['vagas']}({o['nsub_v']}+{len(o['ground'])}/{len(o['g_all'])}) exig={o['vx']['total']} "
               f"laz={o['lazer']:.0f}/{o['lazer_req']:.0f} perm={o['perm'] * 100:.1f}% H={o['H']:.1f} "
